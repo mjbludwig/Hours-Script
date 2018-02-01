@@ -5,25 +5,33 @@
 # Hardcoded variables and static variables
 #
 #######################
+
+########## All time cards will be saved in this directory, so make sure its there first ###
+test -d ./Daily_Hours
+if [ "$?" = "1" ]
+	then
+		mkdir ./Daily_Hours
+fi
+
+
 # Hardcoded variables for expediency
 TODAY=`date --rfc-3339=ns | cut -d " " -f 1`
 PAYCODE="MGHPCC/INTERN"
 EMERGENCY="Y"
 BILLABLE="N"
 NAME="mludwig"
-rm -r ./"${TODAY}_hours.tmp"
-touch ./"${TODAY}_hours.tmp"
+THISMONTH=`echo $TODAY | cut -d "-" -f 2`
+THISDAY=`echo $TODAY | cut -d "-" -f 3`
+
+test -e ./Daily_Hours/${TODAY}_hours.txt
+if [ $? = 0 ]
+	then
+		touch ./Daily_Hours/${TODAY}_hours.txt
+fi
 TESTID=0
 NEGCHECK=0
 MOVEON=0
 APPENDER=0
-
-########## All time cards will be saved in this directory, so make sure its there first ###
-test -d ~/Clock_Out
-if [ "$?" = "1" ]
-	then
-		mkdir ~/Clock_Out
-fi
 
 ##########################
 #
@@ -106,6 +114,7 @@ OUTHOUR=`echo $2 | cut -d ":" -f 1`
 TESTHOUR=$((OUTHOUR - INHOUR))
 if [[ $TESTHOUR -le -1 ]] 
 	then
+
 		printf "That clockout time is before your clock in time\! Try again. \n"
 		read -p "What time did you clock out? " INPUT
 	else
@@ -114,7 +123,7 @@ fi
 }
 TestPreviousInput_func(){
 TESTID=0
-LASTTIME=`tail -n 1 ${TODAY}_hours.tmp | cut -d "|" -f 5`
+LASTTIME=`tail -n 1 ./Daily_Hours/${TODAY}_hours.txt | cut -d "|" -f 5`
 LASTHOUR=`echo $LASTTIME | cut -d ":" -f 1`
 LASTMIN=`echo $LASTMIN | cut -d ":" -f 2`
 CURRENTHOUR=`echo $1 | cut -d ":" -f 1`
@@ -210,7 +219,7 @@ while [[ "$INPUT" != "quit" ]] 2>/dev/null ############# Input Loop Start ######
 
 	FINALWORKHOURS=`echo "$WORKHOUR"":""$WORKMIN"`
 	OUTPUT="$NAME|$TODAY|"$TIMEIN"|$TODAY|$TIMEOUT|$FINALWORKHOURS|$PAYCODE|$BILLABLE|$EMERGENCY|$WHATDONE"
-	printf "$OUTPUT\n" >> ./${TODAY}_hours.tmp
+	printf "$OUTPUT\n" >> ./Daily_Hours/${TODAY}_hours.txt
 	printf "$OUTPUT"
 	printf "\n"
 	read -p "Ok, do you have another set to input? (Y/N)" INPUT
@@ -228,6 +237,23 @@ done ############# Input loop end ###################
 
 ADDHOURS=0
 ADDMINS=0
+test -e ./Monthly_Hours/${THISMONTH}_hours.txt
+if [ $THISDAY -eq 26 ] && [ $? = 0 ]
+	then
+		mv ./Monthly_Hours/${THISMONTH}_hours.txt ./Monthly_Hours/${THISMONTH}_hours.arch
+fi
+test -e ./Monthly_Hours/${THISMONTH}_hours.txt
+if [ $? -eq 1 ]
+	then
+		touch ./Monthly_Hours/${THISMONTH}_hours.txt
+	else
+		RUNNINGTOTAL=`cat ./Monthly_Hours/${THISMONTH}_hours.txt`
+		RUNNINGHOURS=`echo $RUNNINGTOTAL | cut -d ":" -f 1`
+		RUNNINGMIN=`echo $RUNNINGTOTAL | cut -d ":" -f 2`
+		((ADDHOURS=ADDHOURS+RUNNINGHOURS))
+		((ADDMINS=ADDMINS+RUNNINGMIN))
+fi
+
 while read f
 	do
 		INPUTHOURS=`echo $f | cut -d "|" -f 6`
@@ -240,12 +266,25 @@ while read f
 				((ADDHOURS++))
 				((ADDMINS=ADDMINS-60))
 		fi
-done < ${TODAY}_hours.tmp
+done < ./Daily_Hours/${TODAY}_hours.txt
+
+
+
+case $ADDMINS in
+	00) EMAILMIN="0"  ;;
+	15) EMAILMIN="25"  ;;
+	30) EMAILMIN="5"  ;;
+	45) EMAILMIN="75"  ;;
+	*) ;;
+esac
+EMAILVAR=`echo "$ADDHOURS"".""$EMAILMIN"`
 
 TOTALHOURS=`echo "$ADDHOURS"":""$ADDMINS"`
+echo $TOTALHOURS > ./Monthly_Hours/${THISMONTH}_hours.txt
 
-EMAILBODY=`cat ./${TODAY}_hours.tmp`
-printf "$EMAILBODY" | mail -s "Hours for Morgan, $TODAY Total:$TOTALHOURS" mludwig@techsquare.com
+
+EMAILBODY=`cat ./Daily_Hours/${TODAY}_hours.txt`
+printf "$EMAILBODY" | mail -s "Hours for Morgan, $TODAY Total:$EMAILVAR" mludwig@techsquare.com
 
 
 
