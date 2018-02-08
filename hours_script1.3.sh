@@ -65,7 +65,7 @@ MinuteFormat_func(){
 MINSCHECK=`echo $INPUT | cut -d ":" -f 2`
 if [[ $MINSCHECK = 0? ]]
 	then 
-		MINSCHECK=`echo $MINSCHECK | cut -c 1`
+		MINSCHECK=`echo $MINSCHECK | cut -c 2`
 	fi
 while [[ $MINSCHECK -gt 60 ]] || [[ -n ${INPUT//[0-9,:]/} ]] 2>/dev/null
 	do
@@ -80,7 +80,7 @@ RoundUp_func(){
 MINUTE=`echo $1 | cut -d ":" -f 2`
 if [[ $MINUTE = 0? ]]
 	then 
-		MINUTES=`echo $MINUTE | cut -c 1`
+		MINUTES=`echo $MINUTE | cut -c 2`
 	else
 		MINUTES=$MINUTE
 fi
@@ -109,39 +109,68 @@ fi
 
 }
 CheckIfNeg_func(){ 
+NEGCHECK=0
 INHOUR=`echo $1 | cut -d ":" -f 1`
 OUTHOUR=`echo $2 | cut -d ":" -f 1`
-TESTHOUR=$((OUTHOUR - INHOUR))
-if [[ $TESTHOUR -le -1 ]] 
-	then
-
-		printf "That clockout time is before your clock in time\! Try again. \n"
-		read -p "What time did you clock out? " INPUT
-	else
-		NEGCHECK=1
-fi
+INMIN=`echo $1 | cut -d ":" -f 2`
+OUTMIN=`echo $2 | cut -d ":" -f 2`
+while [ $NEGCHECK -ne 1 ]
+	do 
+		if [[ $INMIN = 0? ]]
+			then
+				INMIN=`echo $INMIN | cut -c 2`
+		else
+				INMIN=$INMIN
+		fi
+		if [[ $OUTMIN = 0? ]]
+			then
+				OUTMIN=`echo $OUTMIN | cut -c 2`
+		else
+			OUTMIN=$OUTMIN
+		fi
+		TESTHOUR=$((OUTHOUR - INHOUR))
+		TESTMIN=$((OUTMIN - INMIN))
+		if [[ $TESTHOUR -le 0 ]] && [[ $TESTMIN -lt 16 ]]
+			then
+				printf "That clockout time is before your clock in time/nor you havent worked for at least 15 minutes! Try again. \n"
+				read -p "What time did you clock out? " INPUT
+				OUTHOUR=`echo $INPUT | cut -d ":" -f 1`
+				OUTMIN=`echo $INPUT | cut -d ":" -f 2`
+		else
+			NEGCHECK=1
+		fi
+done
 }
 TestPreviousInput_func(){
 TESTID=0
-LASTTIME=`tail -n 1 ./Daily_Hours/${TODAY}_hours.txt | cut -d "|" -f 5`
-LASTHOUR=`echo $LASTTIME | cut -d ":" -f 1`
-LASTMIN=`echo $LASTMIN | cut -d ":" -f 2`
-CURRENTHOUR=`echo $1 | cut -d ":" -f 1`
-CURRENTMIN=`echo $1 | cut -d ":" -f 2`
-HOURTEST=$((CURRENTHOUR - LASTHOUR))
-if [[ $LASTMIN = 0? ]]
-	then 
-		LASTMIN=`echo $LASTMIN | cut -c 1`
-fi
-if [[ $CURRENTMIN = 0? ]]
-	then 
-		CURRENTMIN=`echo $CURRENTMIN | cut -c 1`
-fi
-MINTEST=$((CURRENTMIN - LASTMIN))
-if [[ $HOURTEST -le 00 ]] && [[ $MINTEST -le 00 ]]
+if [ -s ./Daily_Hours/${TODAY}_hours.txt ]
 	then
-		printf "You could not have come back before you left\!\n"
-		read -p "Try again: " INPUT
+		while [ $TESTID -ne 1 ]
+			do
+				LASTTIME=`tail -n 1 ./Daily_Hours/${TODAY}_hours.txt | cut -d "|" -f 5`
+				LASTHOUR=`echo $LASTTIME | cut -d ":" -f 1`
+				LASTMIN=`echo $LASTTIME | cut -d ":" -f 2`
+				CURRENTHOUR=`echo $INPUT | cut -d ":" -f 1`
+				CURRENTMIN=`echo $INPUT | cut -d ":" -f 2`
+				HOURTEST=$((CURRENTHOUR - LASTHOUR))
+				if [[ $LASTMIN = 0? ]]
+					then 
+						LASTMIN=`echo $LASTMIN | cut -c 2`
+				fi
+				if [[ $CURRENTMIN = 0? ]]
+					then 
+						CURRENTMIN=`echo $CURRENTMIN | cut -c 2`
+				fi
+				MINTEST=$((CURRENTMIN - LASTMIN))
+				if [[ $HOURTEST -le 0 ]] && [[ $MINTEST -lt 0 ]]
+					then
+						printf "You could not have come back before you left,\nand you cannot reenter hours already inputed for today.\n"
+						read -p "Try again: " INPUT
+						
+				else
+					TESTID=1
+				fi
+done
 	else
 		TESTID=1
 fi		
@@ -164,9 +193,8 @@ while [[ "$INPUT" != "quit" ]] 2>/dev/null ############# Input Loop Start ######
 				Format_func
 				HourFormat_func
 				MinuteFormat_func
-				TestPreviousInput_func $INPUT
+				TestPreviousInput_func
 		done
-		MOVEON=0
 		TIMEINHOUR=`echo $INPUT | cut -d ":" -f 1`		
 		RoundUp_func $INPUT
 		TIMEINMIN="$MINUTESCORRECT"
@@ -176,6 +204,7 @@ while [[ "$INPUT" != "quit" ]] 2>/dev/null ############# Input Loop Start ######
 		fi
 		HOURPLUS=0
 		TIMEIN="$INPUT"
+		MOVEON=0
 #################### Clock out time ###############
 		read -p "What time did you clock out? " INPUT
 		while [ $MOVEON -ne 3 ] && [ $NEGCHECK -ne 1 ] 2>/dev/null
@@ -185,7 +214,8 @@ while [[ "$INPUT" != "quit" ]] 2>/dev/null ############# Input Loop Start ######
 				MinuteFormat_func
 				CheckIfNeg_func $TIMEIN $INPUT
 		done
-
+		NEGCHECK=0
+		MOVEON=0
 		TIMEOUTHOUR=`echo $INPUT | cut -d ":" -f 1`		
 		RoundUp_func $INPUT
 		TIMEOUTMIN="$MINUTESCORRECT"
@@ -194,12 +224,10 @@ while [[ "$INPUT" != "quit" ]] 2>/dev/null ############# Input Loop Start ######
 				((TIMEOUTHOUR++))
 		fi
 		TIMEOUT="$INPUT"
-		MOVEON=0
 		HOURPLUS=0
 
 ####### What done #######
 	read -p "What did you do in that time? " WHATDONE
-	printf "\n"
 		
 ########## here lie dragons #########
 
